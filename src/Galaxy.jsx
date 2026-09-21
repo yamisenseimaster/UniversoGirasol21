@@ -27,6 +27,24 @@ function glowTexture() {
   });
 }
 
+function nebulaTexture() {
+  // Soft irregular clouds share one texture; their layers move independently.
+  return canvasTexture((ctx, size) => {
+    for (let i = 0; i < 95; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * size * .29;
+      const x = size / 2 + Math.cos(angle) * radius;
+      const y = size / 2 + Math.sin(angle) * radius * .65;
+      const spread = size * (.06 + Math.random() * .17);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, spread);
+      g.addColorStop(0, 'rgba(255,255,255,.065)');
+      g.addColorStop(.4, 'rgba(255,255,255,.028)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - spread, y - spread, spread * 2, spread * 2);
+    }
+  });
+}
+
 export default function Galaxy({ paused, resetKey, onError }) {
   const mount = useRef(null);
   const state = useRef({ paused }); state.current.paused = paused;
@@ -72,7 +90,18 @@ export default function Galaxy({ paused, resetKey, onError }) {
     addGlow(0x763ad0, 1050, new THREE.Vector3(-320, 65, -400), .4);
     addGlow(0xc46430, 950, new THREE.Vector3(340, -140, -410), .28);
     addGlow(0x254ba7, 1100, new THREE.Vector3(40, 320, -570), .3);
-    addGlow(0xffa137, 290, new THREE.Vector3(), .72);
+    const centralGlow = addGlow(0xffa137, 290, new THREE.Vector3(), .72);
+    const cloudMap = nebulaTexture(); textures.add(cloudMap);
+    const cloudColors = [0x8955bd, 0xc77163, 0x557cbf, 0xbd853e];
+    const clouds = Array.from({ length: mobile ? 6 : 9 }, (_, i) => {
+      const angle = i * 2.39996;
+      const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudMap, color: cloudColors[i % 4], transparent: true, opacity: .28, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const size = 370 + (i % 3) * 100;
+      cloud.position.set(Math.cos(angle) * 190, Math.sin(angle) * 95, -160 - (i % 3) * 90);
+      cloud.scale.set(size, size * .72, 1);
+      cloud.userData = { size, x: cloud.position.x, y: cloud.position.y, phase: angle };
+      scene.add(cloud); return cloud;
+    });
 
     // Thousands of independently twinkling stars, in a single draw call.
     const starCount = mobile ? 3500 : 6500;
@@ -116,7 +145,31 @@ export default function Galaxy({ paused, resetKey, onError }) {
     const spiralGeometry = new THREE.BufferGeometry();
     spiralGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     spiralGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    galaxy.add(new THREE.Points(spiralGeometry, new THREE.PointsMaterial({ map: glowMap, size: 2.2, vertexColors: true, transparent: true, opacity: .9, depthWrite: false, blending: THREE.AdditiveBlending })));
+    const spiralTime = { value: 0 };
+    const spiralMaterial = new THREE.PointsMaterial({ map: glowMap, size: 2.2, vertexColors: true, transparent: true, opacity: .9, depthWrite: false, blending: THREE.AdditiveBlending });
+    spiralMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uSpiralTime = spiralTime;
+      shader.vertexShader = 'uniform float uSpiralTime;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
+        #include <begin_vertex>
+        float radius = length(position.xz);
+        float drift = uSpiralTime * .027 / (1.0 + radius * .012);
+        float c = cos(drift), s = sin(drift);
+        transformed.x = position.x * c - position.z * s;
+        transformed.z = position.x * s + position.z * c;
+        transformed.y += sin(radius * .045 - uSpiralTime * .35) * 1.35;
+      `);
+    };
+    galaxy.add(new THREE.Points(spiralGeometry, spiralMaterial));
+    const dustPositions = new Float32Array((mobile ? 240 : 480) * 3);
+    for (let i = 0; i < dustPositions.length; i += 3) {
+      const a = Math.random() * Math.PI * 2, r = 45 + Math.random() * 160;
+      dustPositions.set([Math.cos(a) * r, (Math.random() - .5) * 65, Math.sin(a) * r], i);
+    }
+    const dustGeometry = new THREE.BufferGeometry();
+    dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+    const dust = new THREE.Points(dustGeometry, new THREE.PointsMaterial({ map: glowMap, color: 0xffdf8f, size: 3.3, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    galaxy.add(dust);
     const core = new THREE.Mesh(new THREE.SphereGeometry(17, 48, 32), new THREE.MeshBasicMaterial({ color: 0x020104 }));
     galaxy.add(core);
     for (let i = 0; i < 14; i++) {
@@ -132,11 +185,11 @@ export default function Galaxy({ paused, resetKey, onError }) {
         if (disposed) { loaded.dispose(); return; }
         loaded.colorSpace = THREE.SRGBColorSpace;
         const aspect = loaded.image.width / loaded.image.height;
-        for (let i = 0; i < (mobile ? 14 : 22); i++) {
+        for (let i = 0; i < (mobile ? 20 : 30); i++) {
           const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: loaded, transparent: true, depthWrite: false, opacity: .94, toneMapped: false }));
           const size = 13 + Math.random() * 13;
           sprite.scale.set(size * aspect, size, 1);
-          sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 155, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind: 'flower' };
+          sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 165, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind: 'flower', size, aspect };
           scene.add(sprite); floating.push(sprite);
         }
       }, undefined, () => { if (!disposed) onError('No se pudo cargar una imagen de girasol.'); });
@@ -153,7 +206,7 @@ export default function Galaxy({ paused, resetKey, onError }) {
         }, 1024, 128);
         textures.add(map); return map;
       });
-      for (let i = 0; i < (mobile ? 48 : 76); i++) {
+      for (let i = 0; i < (mobile ? 64 : 96); i++) {
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: wordMaps[i % wordMaps.length], transparent: true, depthWrite: false, opacity: .85, toneMapped: false }));
         const width = 57 + Math.random() * 15;
         sprite.scale.set(width, width / 8, 1);
@@ -176,11 +229,30 @@ export default function Galaxy({ paused, resetKey, onError }) {
       if (!paused) time += delta;
       controls.autoRotate = !paused; controls.update(delta);
       starsMaterial.uniforms.uTime.value = time;
+      spiralTime.value = time;
       galaxy.rotation.y = time * .018;
+      galaxy.rotation.z = -.18 + Math.sin(time * .09) * .025;
+      centralGlow.material.opacity = .7 + Math.sin(time * .45) * .035;
+      dust.rotation.y = -time * .022;
+      dust.position.y = Math.sin(time * .28) * 2;
+      dust.material.opacity = .46 + Math.sin(time * .6) * .07;
+      clouds.forEach((cloud) => {
+        const d = cloud.userData;
+        const breath = 1 + Math.sin(time * .1 + d.phase) * .065;
+        cloud.scale.set(d.size * breath, d.size * .72 * breath, 1);
+        cloud.position.x = d.x + Math.sin(time * .045 + d.phase) * 16;
+        cloud.position.y = d.y + Math.cos(time * .06 + d.phase) * 10;
+        cloud.material.rotation = d.phase + Math.sin(time * .045 + d.phase) * .12;
+        cloud.material.opacity = .26 + Math.sin(time * .12 + d.phase) * .035;
+      });
       floating.forEach((sprite) => {
         const d = sprite.userData, angle = d.angle + time * d.speed;
         sprite.position.set(Math.cos(angle) * d.radius, d.height + Math.sin(time * .35 + d.phase) * 4, Math.sin(angle) * d.radius);
-        if (d.kind === 'flower') sprite.material.rotation = Math.sin(time * .25 + d.phase) * .12;
+        if (d.kind === 'flower') {
+          sprite.material.rotation = Math.sin(time * .25 + d.phase) * .16;
+          const breath = 1 + Math.sin(time * .55 + d.phase) * .035;
+          sprite.scale.set(d.size * d.aspect * breath, d.size * breath, 1);
+        }
         const distance = camera.position.distanceTo(sprite.position);
         sprite.material.opacity = THREE.MathUtils.clamp((distance - 28) / 80, 0, 1) * (d.kind === 'word' ? .85 : .94);
       });
