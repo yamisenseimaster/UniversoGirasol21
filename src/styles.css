@@ -112,9 +112,9 @@ h1 em { display: inline-block; color: #f9c767; font-family: 'Great Vibes', cursi
   .message { font-size: 15px; }.interaction-hint { display: none; }
 }
 
-.welcome-screen { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse 40% 43% at 50% 50%, #392017 0%, #20111a 37%, #0b0811 100%); }
-.welcome-screen::before { content: ''; position: absolute; inset: -25%; background: radial-gradient(ellipse at 50% 50%, rgba(234, 125, 27, .18), transparent 33%), radial-gradient(ellipse at 46% 56%, rgba(99, 45, 90, .15), transparent 45%); filter: blur(30px); animation: welcome-aurora 10s ease-in-out infinite alternate; }
-.welcome-stars { position: absolute; inset: 0; opacity: .55; background-image: radial-gradient(circle, #fce6bc 1px, transparent 1.5px), radial-gradient(circle, #dcae77 .8px, transparent 1.3px); background-size: 143px 163px, 197px 211px; background-position: 23px 47px, 83px 110px; animation: welcome-stars 9s ease-in-out infinite alternate; }
+.welcome-screen { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse 38% 40% at 50% 50%, rgba(17, 9, 19, .12) 0%, rgba(13, 8, 19, .34) 55%, rgba(8, 5, 17, .62) 100%); backdrop-filter: blur(1px) brightness(.72); }
+.welcome-screen::before { content: ''; position: absolute; inset: -25%; background: radial-gradient(ellipse at 50% 50%, rgba(234, 125, 27, .10), transparent 28%); filter: blur(30px); animation: welcome-aurora 10s ease-in-out infinite alternate; }
+.welcome-stars { position: absolute; inset: 0; opacity: .18; background-image: radial-gradient(circle, #fce6bc 1px, transparent 1.5px), radial-gradient(circle, #dcae77 .8px, transparent 1.3px); background-size: 143px 163px, 197px 211px; background-position: 23px 47px, 83px 110px; animation: welcome-stars 9s ease-in-out infinite alternate; }
 .welcome-center { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; transform: translateY(-2vh); }
 .sunflower-start { position: relative; display: grid; place-items: center; width: clamp(140px, 20vmin, 196px); height: clamp(140px, 20vmin, 196px); padding: 16px; border: 0; border-radius: 50%; background: transparent; isolation: isolate; }
 .sunflower-start::after { content: ''; position: absolute; inset: 19%; z-index: -1; border-radius: 50%; background: #ffc357; filter: blur(38px); opacity: .32; animation: welcome-glow 3.5s ease-in-out infinite; }
