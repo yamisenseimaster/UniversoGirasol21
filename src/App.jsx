@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, MousePointer2, Music2, VolumeX, Pause, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flower2, MousePointer2, Music2, VolumeX, Pause, Play, RotateCcw } from 'lucide-react';
 import Galaxy from './Galaxy';
 import { messages, musicUrl, phrases } from './content';
 
 export default function App() {
+  const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -25,15 +26,12 @@ export default function App() {
   }, []);
   useEffect(() => {
     audio.current.volume = .6;
+  }, []);
+  const startExperience = () => {
+    wantsMusic.current = true;
     playMusic();
-    const unlock = (event) => {
-      if (event.target.closest?.('[data-audio-control]')) return;
-      if (wantsMusic.current && audio.current?.paused) playMusic();
-    };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
-    return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
-  }, [playMusic]);
+    setStarted(true);
+  };
   const toggleMusic = () => {
     if (playing) { wantsMusic.current = false; audio.current.pause(); setBlocked(false); }
     else { wantsMusic.current = true; setAudioError(false); playMusic(); }
@@ -41,12 +39,13 @@ export default function App() {
   const changeMessage = (direction) => setIndex((current) => (current + direction + messages.length) % messages.length);
   const motionProps = reducedMotion ? {} : { initial: { opacity: 0, y: -14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 1.2 } };
   return (
-    <main className="experience is-started">
-      <audio ref={audio} src={musicUrl} autoPlay loop preload="auto" onPlay={() => { setPlaying(true); setBlocked(false); }} onPause={() => setPlaying(false)} onError={() => { setAudioError(true); setPlaying(false); }} />
+    <main className={`experience ${started ? 'is-started' : 'is-welcome'}`}>
+      <audio ref={audio} src={musicUrl} loop preload="auto" onPlay={() => { setPlaying(true); setBlocked(false); }} onPause={() => setPlaying(false)} onError={() => { setAudioError(true); setPlaying(false); }} />
+      {started && <>
       <Galaxy paused={paused || !!reducedMotion} resetKey={resetKey} onError={reportError} />
       <div className="scene-vignette" aria-hidden="true" />
       <motion.header className="topbar" {...motionProps}>
-        <div className="brand"><span className="brand-symbol">✳</span><span>PARA TI <small>· UN UNIVERSO EN FLOR</small></span></div>
+        <div className="brand"><Flower2 className="brand-flower" size={22} strokeWidth={1.7} aria-hidden="true" /><span>PARA TI <small>· UN UNIVERSO EN FLOR</small></span></div>
         <div className="toolbar">
           <button className="tool-button" onClick={() => setResetKey((v) => v + 1)} aria-label="Restablecer cámara" title="Restablecer cámara"><RotateCcw size={16} /></button>
           <button className="tool-button" onClick={() => setPaused((v) => !v)} aria-label={paused ? 'Reanudar animación' : 'Pausar animación'} aria-pressed={paused} disabled={!!reducedMotion} title={reducedMotion ? 'Movimiento reducido según tu dispositivo' : 'Pausar movimiento'}>{paused || reducedMotion ? <Play size={16} /> : <Pause size={16} />}</button>
@@ -71,6 +70,20 @@ export default function App() {
       <div className="interaction-hint"><MousePointer2 size={15} /><span>Arrastra para explorar · Rueda o dos dedos para acercar</span></div>
       <AnimatePresence>{(blocked || audioError || sceneError) && <motion.div className="experience-notice" role="status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{sceneError || (audioError ? 'No se pudo reproducir la música. Toca el botón para reintentar.' : 'Toca la galaxia para escuchar Yellow ♫')}</motion.div>}</AnimatePresence>
       <div className="sr-only"><h2>Palabras de esta galaxia</h2><ul>{phrases.map((phrase) => <li key={phrase}>{phrase}</li>)}</ul></div>
+      </>}
+      <AnimatePresence>
+        {!started && <motion.div key="welcome" className="welcome-screen" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.06, filter: 'blur(12px)' }} transition={{ duration: reducedMotion ? .01 : .85, ease: 'easeInOut' }}>
+          <div className="welcome-stars" aria-hidden="true" />
+          <motion.div className="welcome-center" initial={reducedMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .9 }}>
+            <motion.button className="sunflower-start" type="button" onClick={startExperience} aria-label="Tocar el girasol para comenzar la experiencia" whileHover={reducedMotion ? undefined : { scale: 1.08 }} whileTap={reducedMotion ? undefined : { scale: .94 }}>
+              <span className="sunflower-halo" aria-hidden="true" />
+              <img src="/imagenes/girasoles(1).png" alt="" />
+            </motion.button>
+            <p className="welcome-invitation">Toca el girasol para comenzar</p>
+            <span className="welcome-sparkle" aria-hidden="true">✦ &nbsp; ✧ &nbsp; ✦</span>
+          </motion.div>
+        </motion.div>}
+      </AnimatePresence>
     </main>
   );
 }
