@@ -71,6 +71,8 @@ h1 em { display: inline-block; color: #f9c767; font-family: 'Great Vibes', cursi
 /* The galaxy fills the entire screen; interface gradients protect the text. */
 .experience { min-height: 480px; background: radial-gradient(ellipse at 50% 55%, #1b1024, #080511 70%); }
 .galaxy-canvas { inset: 0; }
+.galaxy-layer { position: absolute; inset: 0; }
+.galaxy-layer[inert] { pointer-events: none; }
 .scene-vignette { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#080511b8 0%, transparent 24%, transparent 68%, #080511ce 100%); }
 .title-group { position: absolute; top: 96px; left: 20px; right: 20px; pointer-events: none; text-align: center; }
 .title-group .eyebrow { position: static; margin-bottom: 12px; }

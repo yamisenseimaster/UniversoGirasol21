@@ -45,9 +45,9 @@ function nebulaTexture() {
   });
 }
 
-export default function Galaxy({ paused, resetKey, onError }) {
+export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
   const mount = useRef(null);
-  const state = useRef({ paused }); state.current.paused = paused;
+  const state = useRef({ paused, active }); state.current = { paused, active };
   const controlsRef = useRef(null);
   useEffect(() => { controlsRef.current?.reset(); }, [resetKey]);
 
@@ -55,7 +55,8 @@ export default function Galaxy({ paused, resetKey, onError }) {
     const host = mount.current;
     let renderer;
     try { renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' }); }
-    catch { onError('Tu navegador no pudo iniciar la vista 3D. Prueba activar la aceleración gráfica.'); return; }
+    catch { onError('Tu navegador no pudo iniciar la vista 3D. Prueba activar la aceleración gráfica.'); onReady(); return; }
+    let needsRender = true;
     const mobile = host.clientWidth < 700;
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1.5 : 1.8));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -79,6 +80,7 @@ export default function Galaxy({ paused, resetKey, onError }) {
       const w = host.clientWidth, h = host.clientHeight;
       camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.setSize(w, h); composer.setSize(w, h);
+      needsRender = true;
     };
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     const textures = new Set();
@@ -180,10 +182,11 @@ export default function Galaxy({ paused, resetKey, onError }) {
     let disposed = false;
     const floating = [];
     const loader = new THREE.TextureLoader();
-    flowerUrls.forEach((url, imageIndex) => {
+    const flowerLoads = flowerUrls.map((url, imageIndex) => new Promise((resolve) => {
       const map = loader.load(url, (loaded) => {
-        if (disposed) { loaded.dispose(); return; }
+        if (disposed) { loaded.dispose(); resolve(); return; }
         loaded.colorSpace = THREE.SRGBColorSpace;
+        renderer.initTexture(loaded);
         const aspect = loaded.image.width / loaded.image.height;
         for (let i = 0; i < (mobile ? 20 : 30); i++) {
           const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: loaded, transparent: true, depthWrite: false, opacity: .94, toneMapped: false }));
@@ -192,20 +195,26 @@ export default function Galaxy({ paused, resetKey, onError }) {
           sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 165, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind: 'flower', size, aspect };
           scene.add(sprite); floating.push(sprite);
         }
-      }, undefined, () => { if (!disposed) onError('No se pudo cargar una imagen de girasol.'); });
+        resolve();
+      }, undefined, () => { if (!disposed) onError('No se pudo cargar una imagen de girasol.'); resolve(); });
       textures.add(map);
-    });
-    const addWords = () => {
+    }));
+    const addWords = async () => {
       if (disposed) return;
-      const wordMaps = phrases.map((phrase) => {
+      const wordMaps = [];
+      for (let i = 0; i < phrases.length; i++) {
+        // Upload a few labels at a time so the sunflower stays responsive.
+        if (i % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+        if (disposed) return;
+        const phrase = phrases[i];
         const map = canvasTexture((ctx, width, height) => {
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.font = "500 44px 'DM Sans', sans-serif";
           ctx.fillStyle = '#ffefbc'; ctx.shadowColor = '#ffa827'; ctx.shadowBlur = 12;
           ctx.fillText(phrase, width / 2, height / 2, width - 40);
         }, 1024, 128);
-        textures.add(map); return map;
-      });
+        textures.add(map); renderer.initTexture(map); wordMaps.push(map);
+      }
       for (let i = 0; i < (mobile ? 64 : 96); i++) {
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: wordMaps[i % wordMaps.length], transparent: true, depthWrite: false, opacity: .85, toneMapped: false }));
         const width = 57 + Math.random() * 15;
@@ -214,7 +223,22 @@ export default function Galaxy({ paused, resetKey, onError }) {
         scene.add(sprite); floating.push(sprite);
       }
     };
-    document.fonts.load("500 44px 'DM Sans'").catch(() => {}).then(addWords);
+    let fontTimeout;
+    const wordsLoaded = Promise.race([
+      document.fonts.load("500 44px 'DM Sans'").catch(() => {}),
+      new Promise((resolve) => { fontTimeout = setTimeout(resolve, 2500); }),
+    ]).then(() => { clearTimeout(fontTimeout); return addWords(); });
+    let shadersReady = false, warmedFrames = 0, readySignaled = false;
+    Promise.all([...flowerLoads, wordsLoaded]).then(async () => {
+      if (disposed) return;
+      await renderer.compileAsync(scene, camera);
+      if (!disposed) shadersReady = true;
+    }).catch(() => {
+      if (!disposed) {
+        onError('No se pudo preparar la galaxia. Recarga la página para reintentar.');
+        onReady();
+      }
+    });
 
     const meteors = Array.from({ length: 3 }, (_, i) => {
       const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(-34, 12, 0)]);
@@ -225,7 +249,9 @@ export default function Galaxy({ paused, resetKey, onError }) {
     const render = () => {
       frame = requestAnimationFrame(render);
       const delta = Math.min(clock.getDelta(), .05);
-      const paused = state.current.paused;
+      if (!shadersReady || (!state.current.active && readySignaled && !needsRender)) return;
+      const paused = state.current.paused || !state.current.active;
+      controls.enabled = state.current.active;
       if (!paused) time += delta;
       controls.autoRotate = !paused; controls.update(delta);
       starsMaterial.uniforms.uTime.value = time;
@@ -262,16 +288,22 @@ export default function Galaxy({ paused, resetKey, onError }) {
         meteor.position.set(-200 + phase * 280, 160 - phase * 95, -240);
       });
       composer.render();
+      needsRender = false;
+      // Warm the bloom passes and GPU buffers before allowing the reveal.
+      if (!readySignaled && ++warmedFrames >= 3) {
+        readySignaled = true;
+        onReady();
+      }
     };
     render();
     const contextLost = (event) => { event.preventDefault(); onError('La vista 3D se interrumpió. Recarga la página para volver a entrar.'); };
     renderer.domElement.addEventListener('webglcontextlost', contextLost);
     return () => {
-      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); controls.dispose(); controlsRef.current = null;
+      disposed = true; clearTimeout(fontTimeout); cancelAnimationFrame(frame); observer.disconnect(); controls.dispose(); controlsRef.current = null;
       scene.traverse((object) => { object.geometry?.dispose(); object.material?.dispose(); });
       textures.forEach((map) => map.dispose()); composer.passes.forEach((pass) => pass.dispose?.()); composer.dispose();
       renderer.domElement.removeEventListener('webglcontextlost', contextLost); renderer.dispose(); renderer.domElement.remove();
     };
-  }, [onError]);
+  }, [onError, onReady]);
   return <div ref={mount} className="galaxy-canvas" aria-label="Galaxia 3D: arrastra para girar y usa la rueda o dos dedos para acercarte" />;
 }

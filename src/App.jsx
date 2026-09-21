@@ -5,7 +5,10 @@ import Galaxy from './Galaxy';
 import { messages, musicUrl, phrases } from './content';
 
 export default function App() {
-  const [started, setStarted] = useState(false);
+  const [entryRequested, setEntryRequested] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [preloadScene, setPreloadScene] = useState(false);
+  const started = entryRequested && sceneReady;
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -17,6 +20,15 @@ export default function App() {
   const wantsMusic = useRef(true);
   const reducedMotion = useReducedMotion();
   const reportError = useCallback((message) => setSceneError(message), []);
+  const reportReady = useCallback(() => setSceneReady(true), []);
+  useEffect(() => {
+    // Let the opaque welcome screen paint before preparing WebGL underneath it.
+    let secondFrame;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setPreloadScene(true));
+    });
+    return () => { cancelAnimationFrame(firstFrame); cancelAnimationFrame(secondFrame); };
+  }, []);
   const playMusic = useCallback(() => {
     if (!audio.current || !wantsMusic.current) return;
     audio.current.play().then(() => setBlocked(false)).catch((error) => {
@@ -28,9 +40,10 @@ export default function App() {
     audio.current.volume = .6;
   }, []);
   const startExperience = () => {
+    if (entryRequested) return;
     wantsMusic.current = true;
     playMusic();
-    setStarted(true);
+    setEntryRequested(true);
   };
   const toggleMusic = () => {
     if (playing) { wantsMusic.current = false; audio.current.pause(); setBlocked(false); }
@@ -41,8 +54,10 @@ export default function App() {
   return (
     <main className={`experience ${started ? 'is-started' : 'is-welcome'}`}>
       <audio ref={audio} src={musicUrl} loop preload="auto" onPlay={() => { setPlaying(true); setBlocked(false); }} onPause={() => setPlaying(false)} onError={() => { setAudioError(true); setPlaying(false); }} />
+      <motion.div className="galaxy-layer" aria-hidden={!started} inert={!started} initial={{ opacity: 0 }} animate={{ opacity: started ? 1 : 0 }} transition={{ duration: reducedMotion ? 0 : 1.1, ease: 'easeInOut' }}>
+        {preloadScene && <Galaxy active={started} paused={paused || !!reducedMotion} resetKey={resetKey} onError={reportError} onReady={reportReady} />}
+      </motion.div>
       {started && <>
-      <Galaxy paused={paused || !!reducedMotion} resetKey={resetKey} onError={reportError} />
       <div className="scene-vignette" aria-hidden="true" />
       <motion.header className="topbar" {...motionProps}>
         <div className="brand"><Flower2 className="brand-flower" size={22} strokeWidth={1.7} aria-hidden="true" /><span>PARA TI <small>· UN UNIVERSO EN FLOR</small></span></div>
@@ -72,14 +87,14 @@ export default function App() {
       <div className="sr-only"><h2>Palabras de esta galaxia</h2><ul>{phrases.map((phrase) => <li key={phrase}>{phrase}</li>)}</ul></div>
       </>}
       <AnimatePresence>
-        {!started && <motion.div key="welcome" className="welcome-screen" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.06, filter: 'blur(12px)' }} transition={{ duration: reducedMotion ? .01 : .85, ease: 'easeInOut' }}>
+        {!started && <motion.div key="welcome" className="welcome-screen" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .01 : 1.1, ease: 'easeInOut' }}>
           <div className="welcome-stars" aria-hidden="true" />
           <motion.div className="welcome-center" initial={reducedMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .9 }}>
-            <motion.button className="sunflower-start" type="button" onClick={startExperience} aria-label="Tocar el girasol para comenzar la experiencia" whileHover={reducedMotion ? undefined : { scale: 1.08 }} whileTap={reducedMotion ? undefined : { scale: .94 }}>
+            <motion.button className="sunflower-start" type="button" onClick={startExperience} disabled={entryRequested} aria-busy={entryRequested && !sceneReady} aria-label="Tocar el girasol para comenzar la experiencia" whileHover={reducedMotion ? undefined : { scale: 1.08 }} whileTap={reducedMotion ? undefined : { scale: .94 }}>
               <span className="sunflower-halo" aria-hidden="true" />
               <img src="/imagenes/girasoles(1).png" alt="" />
             </motion.button>
-            <p className="welcome-invitation">Toca el girasol para comenzar</p>
+            <p className="welcome-invitation" role="status">{entryRequested ? 'La galaxia está despertando…' : 'Toca el girasol para comenzar'}</p>
             <span className="welcome-sparkle" aria-hidden="true">✦ &nbsp; ✧ &nbsp; ✦</span>
           </motion.div>
         </motion.div>}
