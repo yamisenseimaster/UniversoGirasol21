@@ -41,9 +41,9 @@ export default function App() {
   return (
     <main className={`experience ${started ? 'is-started' : 'is-welcome'}`}>
       <audio ref={audio} src={musicUrl} loop preload="auto" onPlay={() => { setPlaying(true); setBlocked(false); }} onPause={() => setPlaying(false)} onError={() => { setAudioError(true); setPlaying(false); }} />
-      <Galaxy paused={!started || paused || !!reducedMotion} resetKey={resetKey} onError={reportError} />
-      <div className="scene-vignette" aria-hidden="true" />
       {started && <>
+      <Galaxy paused={paused || !!reducedMotion} resetKey={resetKey} onError={reportError} />
+      <div className="scene-vignette" aria-hidden="true" />
       <motion.header className="topbar" {...motionProps}>
         <div className="brand"><Flower2 className="brand-flower" size={22} strokeWidth={1.7} aria-hidden="true" /><span>PARA TI <small>· UN UNIVERSO EN FLOR</small></span></div>
         <div className="toolbar">
