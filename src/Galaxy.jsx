@@ -181,6 +181,7 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
 
     let disposed = false;
     const floating = [];
+    const hearts = [];
     const loader = new THREE.TextureLoader();
     const decorations = [
       ...flowerUrls.map((url) => ({ url, kind: 'flower', count: mobile ? 28 : 42 })),
@@ -197,6 +198,12 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
           const size = kind === 'heart' ? 9 + Math.random() * 9 : 13 + Math.random() * 13;
           sprite.scale.set(size * aspect, size, 1);
           sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 165, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind, size, aspect };
+          if (kind === 'heart') {
+            const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, color: 0xff526b, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+            sprite.userData.heartIndex = hearts.length;
+            sprite.userData.halo = halo;
+            hearts.push(sprite); scene.add(halo);
+          }
           scene.add(sprite); floating.push(sprite);
         }
         resolve();
@@ -287,18 +294,30 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
         cloud.material.rotation = d.phase + Math.sin(time * .045 + d.phase) * .12;
         cloud.material.opacity = .26 + Math.sin(time * .12 + d.phase) * .035;
       });
+      // One heart lights up per slot, with a short dark gap before the next.
+      const heartSlot = 1.8;
+      const activeHeart = Math.floor(time / heartSlot) % Math.max(hearts.length, 1);
+      const heartProgress = (time % heartSlot) / 1.55;
+      const heartLight = heartProgress < 1 ? Math.sin(heartProgress * Math.PI) ** 2 : 0;
       floating.forEach((sprite) => {
         const d = sprite.userData, angle = d.angle + time * d.speed;
+        const light = d.kind === 'heart' && d.heartIndex === activeHeart ? heartLight : 0;
         sprite.position.set(Math.cos(angle) * d.radius, d.height + Math.sin(time * .35 + d.phase) * 4, Math.sin(angle) * d.radius);
         if (d.kind !== 'word') {
           sprite.material.rotation = Math.sin(time * .25 + d.phase) * .16;
           const breath = d.kind === 'heart'
-            ? 1 + Math.pow(Math.max(0, Math.sin(time * 2.4 + d.phase)), 6) * .1
+            ? 1 + light * .12
             : 1 + Math.sin(time * .55 + d.phase) * .035;
           sprite.scale.set(d.size * d.aspect * breath, d.size * breath, 1);
         }
         const distance = camera.position.distanceTo(sprite.position);
         sprite.material.opacity = THREE.MathUtils.clamp((distance - 28) / 80, 0, 1) * (d.kind === 'word' ? .85 : .94);
+        if (d.kind === 'heart') {
+          sprite.material.color.setScalar(.38 + light * 2.4);
+          d.halo.position.copy(sprite.position);
+          d.halo.scale.setScalar(d.size * (2.1 + light * .5));
+          d.halo.material.opacity = light * sprite.material.opacity * .72;
+        }
       });
       meteors.forEach((meteor) => {
         const d = meteor.userData;
