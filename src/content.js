@@ -27,4 +27,5 @@ export const messages = [
   'Para ti, que conviertes los pequeños momentos en recuerdos enormes.',
 ];
 export const musicUrl = '/musica/Coldplay%20-%20Yellow.mp3';
-export const flowerUrls = ['/imagenes/girasoles(1).png', '/imagenes/pngwing.com.png'];
+export const flowerUrls = ['/imagenes/girasoles(1).png'];
+export const heartUrls = ['/imagenes/pngwing.com%20(2).png', '/imagenes/pngwing.com%20(3).png'];

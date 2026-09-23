@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { flowerUrls, phrases } from './content';
+import { flowerUrls, heartUrls, phrases } from './content';
 
 function canvasTexture(draw, width = 512, height = width) {
   const canvas = document.createElement('canvas');
@@ -182,21 +182,25 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
     let disposed = false;
     const floating = [];
     const loader = new THREE.TextureLoader();
-    const flowerLoads = flowerUrls.map((url, imageIndex) => new Promise((resolve) => {
+    const decorations = [
+      ...flowerUrls.map((url) => ({ url, kind: 'flower', count: mobile ? 28 : 42 })),
+      ...heartUrls.map((url) => ({ url, kind: 'heart', count: mobile ? 8 : 12 })),
+    ];
+    const decorationLoads = decorations.map(({ url, kind, count }, imageIndex) => new Promise((resolve) => {
       const map = loader.load(url, (loaded) => {
         if (disposed) { loaded.dispose(); resolve(); return; }
         loaded.colorSpace = THREE.SRGBColorSpace;
         renderer.initTexture(loaded);
         const aspect = loaded.image.width / loaded.image.height;
-        for (let i = 0; i < (mobile ? 20 : 30); i++) {
+        for (let i = 0; i < count; i++) {
           const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: loaded, transparent: true, depthWrite: false, opacity: .94, toneMapped: false }));
-          const size = 13 + Math.random() * 13;
+          const size = kind === 'heart' ? 9 + Math.random() * 9 : 13 + Math.random() * 13;
           sprite.scale.set(size * aspect, size, 1);
-          sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 165, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind: 'flower', size, aspect };
+          sprite.userData = { angle: Math.random() * Math.PI * 2, radius: 80 + Math.random() * 160, height: (Math.random() - .5) * 165, phase: Math.random() * 6, speed: .013 + imageIndex * .005, kind, size, aspect };
           scene.add(sprite); floating.push(sprite);
         }
         resolve();
-      }, undefined, () => { if (!disposed) onError('No se pudo cargar una imagen de girasol.'); resolve(); });
+      }, undefined, () => { if (!disposed) onError('No se pudo cargar una imagen de la galaxia.'); resolve(); });
       textures.add(map);
     }));
     const addWords = async () => {
@@ -229,7 +233,7 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
       new Promise((resolve) => { fontTimeout = setTimeout(resolve, 2500); }),
     ]).then(() => { clearTimeout(fontTimeout); return addWords(); });
     let shadersReady = false, warmedFrames = 0, readySignaled = false;
-    Promise.all([...flowerLoads, wordsLoaded]).then(async () => {
+    Promise.all([...decorationLoads, wordsLoaded]).then(async () => {
       if (disposed) return;
       await renderer.compileAsync(scene, camera);
       if (!disposed) shadersReady = true;
@@ -240,10 +244,22 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
       }
     });
 
-    const meteors = Array.from({ length: 3 }, (_, i) => {
-      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(-34, 12, 0)]);
-      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffe5b2, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }));
-      line.userData.offset = i * 5.3; scene.add(line); return line;
+    const meteors = Array.from({ length: mobile ? 7 : 12 }, (_, i) => {
+      const direction = new THREE.Vector3(1, -.25 - Math.random() * .4, .08).normalize();
+      const length = 28 + Math.random() * 32;
+      const points = [], colors = [];
+      for (let j = 0; j < 12; j++) {
+        const fade = 1 - j / 11;
+        points.push(direction.clone().multiplyScalar(-length * j / 11));
+        colors.push(fade, fade * .88, fade * .65);
+      }
+      const g = new THREE.BufferGeometry().setFromPoints(points);
+      g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const head = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, color: 0xffe5b2, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      head.scale.set(7, 7, 1); line.add(head);
+      line.userData = { offset: i * 1.15, period: 10 + Math.random() * 5, duration: 1.8 + Math.random(), direction, start: new THREE.Vector3(-260 + Math.random() * 130, 60 + Math.random() * 190, -260 + Math.random() * 360), head };
+      scene.add(line); return line;
     });
     const clock = new THREE.Clock(); let time = 0, frame;
     const render = () => {
@@ -274,18 +290,23 @@ export default function Galaxy({ active, paused, resetKey, onError, onReady }) {
       floating.forEach((sprite) => {
         const d = sprite.userData, angle = d.angle + time * d.speed;
         sprite.position.set(Math.cos(angle) * d.radius, d.height + Math.sin(time * .35 + d.phase) * 4, Math.sin(angle) * d.radius);
-        if (d.kind === 'flower') {
+        if (d.kind !== 'word') {
           sprite.material.rotation = Math.sin(time * .25 + d.phase) * .16;
-          const breath = 1 + Math.sin(time * .55 + d.phase) * .035;
+          const breath = d.kind === 'heart'
+            ? 1 + Math.pow(Math.max(0, Math.sin(time * 2.4 + d.phase)), 6) * .1
+            : 1 + Math.sin(time * .55 + d.phase) * .035;
           sprite.scale.set(d.size * d.aspect * breath, d.size * breath, 1);
         }
         const distance = camera.position.distanceTo(sprite.position);
         sprite.material.opacity = THREE.MathUtils.clamp((distance - 28) / 80, 0, 1) * (d.kind === 'word' ? .85 : .94);
       });
       meteors.forEach((meteor) => {
-        const phase = (time + meteor.userData.offset) % 18;
-        meteor.material.opacity = paused || phase > 1.8 ? 0 : Math.sin(phase / 1.8 * Math.PI) * .8;
-        meteor.position.set(-200 + phase * 280, 160 - phase * 95, -240);
+        const d = meteor.userData;
+        const phase = (time + d.offset) % d.period;
+        const opacity = paused || phase > d.duration ? 0 : Math.sin(phase / d.duration * Math.PI) * .9;
+        meteor.material.opacity = opacity;
+        d.head.material.opacity = opacity;
+        meteor.position.copy(d.start).addScaledVector(d.direction, phase * 230);
       });
       composer.render();
       needsRender = false;
